@@ -31,6 +31,7 @@ dist/
 index_output/
 
 # Local course corpus and large dataset archives
+ANALYST/
 DEV/
 *.zip
 

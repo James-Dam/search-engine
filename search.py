@@ -1,4 +1,5 @@
 from nltk.stem import PorterStemmer
+import argparse
 import json
 import math
 import os
@@ -13,16 +14,47 @@ DOC_MAP_PATH = os.path.join(INDEX_FOLDER, "doc_map.json")
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
 
-def load_index():
+
+def get_index_paths(index_folder):
+    return {
+        "index": os.path.join(index_folder, "final_index.txt"),
+        "offsets": os.path.join(index_folder, "term_offsets.json"),
+        "doc_map": os.path.join(index_folder, "doc_map.json"),
+    }
+
+
+def validate_index_folder(index_folder):
+    paths = get_index_paths(index_folder)
+
+    if not os.path.isdir(index_folder):
+        print(f"Missing index folder: {index_folder}")
+        print(f"Please run indexing first: python index.py --input ANALYST --output {index_folder}")
+        return False
+
+    missing_files = [path for path in paths.values() if not os.path.isfile(path)]
+    if missing_files:
+        print(f"Incomplete index in folder: {index_folder}")
+        print("Missing files:")
+        for path in missing_files:
+            print(f"  - {path}")
+        print(f"Please run indexing first: python index.py --input ANALYST --output {index_folder}")
+        return False
+
+    return True
+
+
+def load_index(index_folder=INDEX_FOLDER):
     """
     Loads the term offsets and doc map from disk into memory.
     Returns:
         tuple: (term_offsets dict, doc_map dict)
     """
-    with open(OFFSETS_PATH, "r", encoding="utf-8") as f:
+    paths = get_index_paths(index_folder)
+
+    with open(paths["offsets"], "r", encoding="utf-8") as f:
         term_offsets = json.load(f)
 
-    with open(DOC_MAP_PATH, "r", encoding="utf-8") as f:
+    with open(paths["doc_map"], "r", encoding="utf-8") as f:
         doc_map = json.load(f)
 
     return term_offsets, doc_map
@@ -190,7 +222,7 @@ def get_matched_term_counts(doc_ids, term_postings):
     return matched_counts
 
 
-def search(query, term_offsets, doc_map, top_n=5):
+def search(query, term_offsets, doc_map, top_n=5, index_path=INDEX_PATH):
     """
     Search the index for a query using AND logic and tf-idf ranking.
     Args:
@@ -215,7 +247,7 @@ def search(query, term_offsets, doc_map, top_n=5):
     # postings format: [doc_id, tf, important_tf]
     term_postings = {}
 
-    with open(INDEX_PATH, "r", encoding="utf-8") as index_file:
+    with open(index_path, "r", encoding="utf-8") as index_file:
         for term in query_terms:
             postings = get_postings(term, term_offsets, index_file)
 
@@ -313,9 +345,28 @@ def search(query, term_offsets, doc_map, top_n=5):
     return results
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Search a generated disk-based inverted index."
+    )
+    parser.add_argument(
+        "--index",
+        default="index_output",
+        help="Folder containing generated index files. Defaults to index_output.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    index_folder = os.path.normpath(args.index)
+    index_path = get_index_paths(index_folder)["index"]
+
+    if not validate_index_folder(index_folder):
+        raise SystemExit(1)
+
     print("loading index offsets...")
-    term_offsets, doc_map = load_index()
+    term_offsets, doc_map = load_index(index_folder)
     print(f"Index ready. {len(doc_map)} documents indexed.")
     print(f"{len(term_offsets)} terms available.\n")
 
@@ -327,7 +378,7 @@ def main():
             continue
 
         start_time = time.time()
-        results = search(query, term_offsets, doc_map)
+        results = search(query, term_offsets, doc_map, index_path=index_path)
         end_time = time.time()
 
         elapsed_ms = (end_time - start_time) * 1000
