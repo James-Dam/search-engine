@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 from nltk.stem import PorterStemmer
 from search_engine.ranking.scorer import SUPPORTED_MODELS, score_term
+import html
 import json
 import os
 import re
@@ -350,20 +351,27 @@ def extract_title_and_text(doc_info):
     return title, re.sub(r"\s+", " ", text)
 
 
-def build_snippet(doc_info, raw_query_terms, max_chars=180):
+def build_snippet(doc_info, raw_query_terms, max_chars=200):
     title, text = extract_title_and_text(doc_info)
     if not text:
         return title, ""
 
     lowered = text.lower()
-    positions = [
-        lowered.find(term)
-        for term in raw_query_terms
-        if term and lowered.find(term) >= 0
-    ]
+    positions = []
+    for term in raw_query_terms:
+        if not term:
+            continue
+        position = lowered.find(term.lower())
+        if position >= 0:
+            positions.append(position)
+
     center = min(positions) if positions else 0
     start = max(0, center - max_chars // 3)
     end = min(len(text), start + max_chars)
+
+    if end - start < max_chars and start > 0:
+        start = max(0, end - max_chars)
+
     snippet = text[start:end].strip()
 
     if start > 0:
@@ -372,6 +380,21 @@ def build_snippet(doc_info, raw_query_terms, max_chars=180):
         snippet = snippet + "..."
 
     return title, snippet
+
+
+def highlight_snippet(snippet, raw_query_terms):
+    if not snippet:
+        return ""
+
+    escaped = html.escape(snippet)
+    terms = sorted(set(t for t in raw_query_terms if t), key=len, reverse=True)
+
+    for term in terms:
+        escaped_term = html.escape(term)
+        pattern = re.compile(re.escape(escaped_term), re.IGNORECASE)
+        escaped = pattern.sub(lambda match: f"<mark>{match.group(0)}</mark>", escaped)
+
+    return escaped
 
 
 def search(
@@ -499,13 +522,16 @@ def search(
 
         seen_urls.add(normalized)
         title, snippet = build_snippet(doc_info, raw_query_terms)
+        highlighted_snippet = highlight_snippet(snippet, raw_query_terms)
         result = {
             "doc_id": doc_id,
             "url": url,
             "score": float(score),
             "title": title,
             "snippet": snippet,
+            "highlighted_snippet": highlighted_snippet,
             "matched_fields": sorted(matched_fields.get(doc_id, set())),
+            "ranking_model": ranking_model,
         }
 
         if debug:

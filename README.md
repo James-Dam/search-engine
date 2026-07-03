@@ -143,6 +143,12 @@ Debug mode shows per-term scores, document length, and field contribution:
 python search.py --index index_output --ranking bm25 --debug
 ```
 
+Run tests:
+
+```bash
+pytest
+```
+
 Example terminal queries:
 
 ```text
@@ -198,6 +204,8 @@ Example response:
     "score": 12.3456,
     "title": "Example Page",
     "snippet": "...machine learning excerpt...",
+    "highlighted_snippet": "...<mark>machine</mark> <mark>learning</mark> excerpt...",
+    "ranking_model": "bm25",
     "matched_fields": ["body", "title"]
   }
 ]
@@ -231,12 +239,15 @@ Return format:
         "score": 12.3456,
         "title": "Example Page",
         "snippet": "...machine learning excerpt...",
+        "highlighted_snippet": "...<mark>machine</mark> <mark>learning</mark> excerpt...",
         "matched_fields": ["body", "title"],
+        "ranking_model": "bm25",
     }
 ]
 ```
 
 `debug=True` adds per-term scorer details and document-level adjustments to each result.
+`highlighted_snippet` is safe, simple markup intended for future UI rendering; the plain `snippet` field is preserved for clients that do not render HTML.
 
 ## How Indexing Works
 
@@ -296,7 +307,8 @@ Both ranking models keep disk-based term lookup. Only postings for query terms a
 - The optional full `DEV/` dataset is not included because it is too large for GitHub.
 - Index files must already exist before running search.
 - Snippets are best-effort and depend on the original JSON file still being present at the path recorded in `doc_map.json`.
-- There is no automated test suite yet.
+- Highlighting is literal query-term markup and does not perform semantic matching.
+- The test suite is intentionally small and focused on query processing, snippets, and API basics.
 - There is no React frontend yet.
 - There is no Docker setup yet.
 - Ranking is more realistic with BM25, but still intentionally explainable rather than production-grade.

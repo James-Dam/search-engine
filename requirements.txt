@@ -1,4 +1,6 @@
 beautifulsoup4>=4.12
 fastapi>=0.115
+httpx>=0.27
 nltk>=3.8
+pytest>=8.0
 uvicorn>=0.30

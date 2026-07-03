@@ -17,11 +17,17 @@ def health():
 
 @app.get("/search")
 def search(
-    q: str = Query(..., min_length=1),
+    q: str = Query(""),
     top_k: int = Query(10, ge=1, le=100),
     ranking: str = Query("bm25", pattern="^(bm25|tfidf)$"),
     debug: bool = Query(False),
 ):
+    if not q.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Query parameter 'q' must not be empty."},
+        )
+
     try:
         return search_query(
             q,
@@ -35,6 +41,7 @@ def search(
             status_code=503,
             detail={
                 "message": "Index is missing or incomplete. Please run indexing first.",
+                "command": f"python index.py --input ANALYST --output {error.index_folder}",
                 "index_folder": error.index_folder,
                 "missing_files": error.missing_files,
             },
