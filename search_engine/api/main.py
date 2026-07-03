@@ -16,9 +16,20 @@ def health():
 
 
 @app.get("/search")
-def search(q: str = Query(..., min_length=1), top_k: int = Query(10, ge=1, le=100)):
+def search(
+    q: str = Query(..., min_length=1),
+    top_k: int = Query(10, ge=1, le=100),
+    ranking: str = Query("bm25", pattern="^(bm25|tfidf)$"),
+    debug: bool = Query(False),
+):
     try:
-        return search_query(q, index_path=DEFAULT_INDEX_PATH, top_k=top_k)
+        return search_query(
+            q,
+            index_path=DEFAULT_INDEX_PATH,
+            top_k=top_k,
+            ranking_model=ranking,
+            debug=debug,
+        )
     except MissingIndexError as error:
         raise HTTPException(
             status_code=503,

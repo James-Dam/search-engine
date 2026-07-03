@@ -21,6 +21,17 @@ def parse_args():
         default=10,
         help="Maximum number of results to print. Defaults to 10.",
     )
+    parser.add_argument(
+        "--ranking",
+        choices=["bm25", "tfidf"],
+        default="bm25",
+        help="Ranking model to use. Defaults to bm25.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show per-term ranking details for each result.",
+    )
     return parser.parse_args()
 
 
@@ -51,7 +62,13 @@ def main():
 
         start_time = time.time()
         try:
-            results = search_query(query, index_folder, top_k=args.top_k)
+            results = search_query(
+                query,
+                index_folder,
+                top_k=args.top_k,
+                ranking_model=args.ranking,
+                debug=args.debug,
+            )
         except MissingIndexError as error:
             print_index_error(error)
             raise SystemExit(1)
@@ -63,7 +80,30 @@ def main():
         if results:
             print(f"\nTop {len(results)} results for '{query}':")
             for i, result in enumerate(results, 1):
-                print(f"  {i}. {result['url']}  (score: {result['score']:.4f})")
+                fields = ", ".join(result["matched_fields"]) or "none"
+                print(
+                    f"  {i}. [{result['doc_id']}] {result['url']}  "
+                    f"(score: {result['score']:.4f}, fields: {fields})"
+                )
+                if result["snippet"]:
+                    print(f"     {result['snippet']}")
+                if args.debug:
+                    for term_debug in result.get("debug", {}).get("terms", []):
+                        print(
+                            "     "
+                            f"{term_debug['term']}: "
+                            f"score={term_debug['total_term_score']:.4f}, "
+                            f"doc_len={term_debug['document_length']}, "
+                            f"field={term_debug['field_contribution']:.4f}"
+                        )
+                    adjustments = result.get("debug", {}).get("adjustments", {})
+                    if adjustments:
+                        print(
+                            "     "
+                            f"adjusted={adjustments['final_score']:.4f}, "
+                            f"url_boost={adjustments['url_query_boost']:.4f}, "
+                            f"coverage={adjustments['or_coverage_boost']:.4f}"
+                        )
         else:
             print("No results found.")
         print()

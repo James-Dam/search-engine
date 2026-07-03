@@ -12,6 +12,8 @@ TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
 
 # HTML tags that are considered important (boosted in ranking)
 IMPORTANT_TAGS = ["title", "h1", "h2", "h3", "b", "strong"]
+HEADER_TAGS = ["h1", "h2", "h3"]
+BOLD_TAGS = ["b", "strong"]
 
 # How many documents to process before flushing the in-memory index to disk
 # This prevents memory overload for large datasets
@@ -56,6 +58,34 @@ def extract_text_fields(html_content):
     important_text = " ".join(important_text_parts)
 
     return full_text, important_text
+
+
+def extract_document_fields(html_content):
+    """
+    Extract full text plus field-specific text used by ranking.
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+
+    full_text = soup.get_text(separator=" ", strip=True)
+    title_text = " ".join(
+        tag.get_text(separator=" ", strip=True) for tag in soup.find_all("title")
+    )
+    header_text = " ".join(
+        tag.get_text(separator=" ", strip=True) for tag in soup.find_all(HEADER_TAGS)
+    )
+    bold_text = " ".join(
+        tag.get_text(separator=" ", strip=True) for tag in soup.find_all(BOLD_TAGS)
+    )
+
+    return {
+        "full_text": full_text,
+        "title_text": title_text,
+        "header_text": header_text,
+        "bold_text": bold_text,
+    }
 
 
 def write_partial_index(inverted_index, output_folder, block_id):
@@ -188,25 +218,49 @@ def index(root_folder, output_folder="index_output"):
                     if not html_content.strip():
                         continue
 
-                    full_text, important_text = extract_text_fields(html_content)
+                    fields = extract_document_fields(html_content)
 
-                    tokens = tokenize(full_text, stemmer, stem_cache)
-                    important_tokens = tokenize(important_text, stemmer, stem_cache)
+                    tokens = tokenize(fields["full_text"], stemmer, stem_cache)
+                    title_tokens = tokenize(fields["title_text"], stemmer, stem_cache)
+                    header_tokens = tokenize(fields["header_text"], stemmer, stem_cache)
+                    bold_tokens = tokenize(fields["bold_text"], stemmer, stem_cache)
+                    url_tokens = set(tokenize(clean_url, stemmer, stem_cache))
+
+                    document_length = len(tokens)
+                    if document_length == 0:
+                        continue
 
                     doc_counter += 1
                     curr_doc_id = doc_counter
 
                     doc_map[curr_doc_id] = {
                         "url": clean_url,
-                        "path": full_path
+                        "path": full_path,
+                        "document_length": document_length,
                     }
 
                     term_freqs = Counter(tokens)
-                    important_freqs = Counter(important_tokens)
+                    title_freqs = Counter(title_tokens)
+                    header_freqs = Counter(header_tokens)
+                    bold_freqs = Counter(bold_tokens)
 
                     for term, freq in term_freqs.items():
-                        important_tf = important_freqs.get(term, 0)
-                        inverted_index[term].append([curr_doc_id, freq, important_tf])
+                        title_hits = title_freqs.get(term, 0)
+                        header_hits = header_freqs.get(term, 0)
+                        bold_hits = bold_freqs.get(term, 0)
+                        inverted_index[term].append(
+                            {
+                                "doc_id": curr_doc_id,
+                                "document_length": document_length,
+                                "title_hits": title_hits,
+                                "header_hits": header_hits,
+                                "bold_hits": bold_hits,
+                                "url_match_flag": 1 if term in url_tokens else 0,
+                                "raw_term_frequency": freq,
+                                "normalized_term_frequency": freq / document_length,
+                                "important_term_frequency": title_hits + header_hits + bold_hits,
+                            }
+                        )
 
                     # Flush partial index periodically
                     if doc_counter % FLUSH_EVERY == 0:
@@ -243,6 +297,7 @@ def write_index_and_report(doc_map, final_index_path, offsets_path, output_folde
     os.makedirs(output_folder, exist_ok=True)
 
     doc_map_path = os.path.join(output_folder, "doc_map.json")
+    metadata_path = os.path.join(output_folder, "index_metadata.json")
     report_path = os.path.join(output_folder, "report.txt")
 
     str_doc_map = {str(k): v for k, v in doc_map.items()}
@@ -252,10 +307,22 @@ def write_index_and_report(doc_map, final_index_path, offsets_path, output_folde
     with open(offsets_path, "r", encoding="utf-8") as f:
         term_offsets = json.load(f)
 
+    total_doc_length = sum(doc.get("document_length", 0) for doc in doc_map.values())
+    avg_doc_len = total_doc_length / len(doc_map) if doc_map else 0
+    metadata = {
+        "postings_format": "v2",
+        "ranking_default": "bm25",
+        "num_documents": len(doc_map),
+        "avg_doc_len": avg_doc_len,
+    }
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
     index_size_kb = (
         os.path.getsize(final_index_path)
         + os.path.getsize(doc_map_path)
         + os.path.getsize(offsets_path)
+        + os.path.getsize(metadata_path)
     ) / 1024
 
     num_documents = len(doc_map)
@@ -267,10 +334,11 @@ def write_index_and_report(doc_map, final_index_path, offsets_path, output_folde
         f.write("========================\n\n")
         f.write(f"Number of indexed documents: {num_documents}\n")
         f.write(f"Number of unique tokens: {num_unique_tokens}\n")
+        f.write(f"Average document length: {avg_doc_len:.2f} tokens\n")
         f.write(f"Total size of index on disk: {index_size_kb:.2f} KB\n")
 
     print("\n--- REPORT ---")
     print(f"Number of indexed documents: {num_documents}")
     print(f"Number of unique tokens: {num_unique_tokens}")
+    print(f"Average document length: {avg_doc_len:.2f} tokens")
     print(f"Total size of index on disk: {index_size_kb:.2f} KB")
-
