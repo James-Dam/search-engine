@@ -26,6 +26,8 @@ logs/
 build/
 dist/
 *.egg-info/
+frontend/dist/
+frontend/node_modules/
 
 # Generated search index output
 index_output/
@@ -34,6 +36,7 @@ index_output/
 ANALYST/
 DEV/
 *.zip
+!analyst.zip
 
 # OS and editor files
 .DS_Store

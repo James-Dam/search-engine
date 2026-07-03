@@ -47,7 +47,11 @@ a {
 }
 
 .eyebrow {
-  display: none;
+  margin: 0 0 8px;
+  color: #5f6368;
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 h1,

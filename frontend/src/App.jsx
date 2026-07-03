@@ -146,7 +146,7 @@ export default function App() {
       <section className="search-panel">
         <div className="title-row">
           <div>
-            <p className="eyebrow">Portfolio Search Engine System</p>
+            <p className="eyebrow">UCI Disk-Based Search</p>
             <h1>ZotSearch</h1>
           </div>
         </div>
