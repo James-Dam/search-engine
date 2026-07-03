@@ -1,13 +1,26 @@
 import os
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from search_engine.core.search import MissingIndexError
 from search_engine.service.search_service import search_query
 
 
-app = FastAPI(title="Disk-Based Search Engine API")
+app = FastAPI(title="ZotSearch API")
 DEFAULT_INDEX_PATH = os.environ.get("SEARCH_INDEX_PATH", "index_output")
+FRONTEND_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

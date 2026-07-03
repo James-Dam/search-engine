@@ -58,6 +58,14 @@ Step 5: run the API server
 uvicorn api.main:app --reload
 ```
 
+Step 6: run the React frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 ## Current Architecture
 
 ```text
@@ -67,6 +75,14 @@ uvicorn api.main:app --reload
 |-- api/
 |   |-- __init__.py
 |   `-- main.py                      # Uvicorn entry point shim
+|-- frontend/
+|   |-- index.html
+|   |-- package.json
+|   |-- vite.config.js
+|   `-- src/
+|       |-- App.jsx
+|       |-- main.jsx
+|       `-- styles.css
 |-- search_engine/
 |   |-- __init__.py
 |   |-- core/
@@ -97,6 +113,7 @@ Separation of concerns:
 - Core: indexing, disk lookup, and ranking logic.
 - Service: reusable function boundary for CLI and API callers.
 - API: HTTP interface built with FastAPI.
+- Frontend: React/Vite web interface that calls the FastAPI backend.
 
 ## CLI Usage
 
@@ -213,6 +230,36 @@ Example response:
 
 If the generated index is missing or incomplete, the API returns HTTP 503 with details telling you to run indexing first.
 
+## Frontend Usage
+
+Start the backend first:
+
+```bash
+uvicorn api.main:app --reload
+```
+
+Start the frontend in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL, usually:
+
+```text
+http://127.0.0.1:5173
+```
+
+The frontend calls:
+
+```text
+http://127.0.0.1:8000/search
+```
+
+To point the frontend at another backend URL, set `VITE_API_BASE_URL` in `frontend/.env.local`.
+
 ## Reusable Search Function
 
 The service layer exposes:
@@ -309,14 +356,13 @@ Both ranking models keep disk-based term lookup. Only postings for query terms a
 - Snippets are best-effort and depend on the original JSON file still being present at the path recorded in `doc_map.json`.
 - Highlighting is literal query-term markup and does not perform semantic matching.
 - The test suite is intentionally small and focused on query processing, snippets, and API basics.
-- There is no React frontend yet.
+- The React frontend is intentionally simple and calls the local FastAPI backend.
 - There is no Docker setup yet.
 - Ranking is more realistic with BM25, but still intentionally explainable rather than production-grade.
 - Generated index files can be large and are treated as local build artifacts.
 
 ## Planned Improvements
 
-- Add a React frontend for query entry and result display.
 - Add Docker support for repeatable local setup.
 - Add tests for tokenization, indexing, offset lookup, API responses, and ranking behavior.
 - Add safer recovery for interrupted indexing runs.
